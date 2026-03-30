@@ -140,6 +140,19 @@ class RecommendationRequest(BaseModel):
     requires_special_chars: bool
 
 
+class PasswordHealthResponse(BaseModel):
+    security_score: int
+    total_passwords: int
+    weak_count: int
+    medium_count: int
+    strong_count: int
+    reused_count: int
+    average_entropy: float
+    recommendations: list[dict]
+    weak_passwords: list[dict]
+    reused_passwords: list[dict]
+
+
 def calculate_entropy(passphrase: str, word_count: int, append_digit: bool) -> float:
     wordlist_size = len(WORDLIST)
     combinations = wordlist_size ** word_count
@@ -437,6 +450,189 @@ async def delete_passphrase(passphrase_id: str, request: Request):
         raise HTTPException(status_code=404, detail="Passphrase not found")
     
     return {"message": "Passphrase deleted successfully"}
+
+
+@api_router.get("/passphrases/health")
+async def get_password_health(request: Request):
+    """Analyze password health and return security metrics."""
+    user = await get_current_user(request, db)
+    
+    # Fetch all user's passphrases
+    passphrases = await db.saved_passphrases.find(
+        {"user_id": user["id"]}
+    ).to_list(1000)
+    
+    if not passphrases:
+        return {
+            "security_score": 0,
+            "total_passwords": 0,
+            "weak_count": 0,
+            "medium_count": 0,
+            "strong_count": 0,
+            "reused_count": 0,
+            "average_entropy": 0,
+            "recommendations": [
+                {
+                    "id": "no_passwords",
+                    "severity": "info",
+                    "title": "No passwords saved yet",
+                    "description": "Start generating and saving secure passphrases to protect your accounts.",
+                    "action": "Generate your first password"
+                }
+            ],
+            "weak_passwords": [],
+            "reused_passwords": []
+        }
+    
+    # Analyze passwords
+    total = len(passphrases)
+    weak_passwords = []
+    medium_passwords = []
+    strong_passwords = []
+    
+    # Check for reused passwords
+    passphrase_map = {}
+    for p in passphrases:
+        phrase = p["passphrase"]
+        if phrase in passphrase_map:
+            passphrase_map[phrase].append(p)
+        else:
+            passphrase_map[phrase] = [p]
+    
+    reused = [items for items in passphrase_map.values() if len(items) > 1]
+    reused_count = sum(len(items) for items in reused)
+    
+    # Categorize by strength
+    total_entropy = 0
+    for p in passphrases:
+        total_entropy += p["entropy"]
+        strength = p["strength"]
+        
+        item = {
+            "id": str(p["_id"]),
+            "label": p.get("label", "Unlabeled"),
+            "passphrase": p["passphrase"],
+            "entropy": p["entropy"],
+            "strength": strength
+        }
+        
+        if strength == "weak":
+            weak_passwords.append(item)
+        elif strength == "medium":
+            medium_passwords.append(item)
+        else:
+            strong_passwords.append(item)
+    
+    weak_count = len(weak_passwords)
+    medium_count = len(medium_passwords)
+    strong_count = len(strong_passwords)
+    average_entropy = round(total_entropy / total, 2)
+    
+    # Calculate security score (0-100)
+    score = 100
+    
+    # Deduct for weak passwords (up to -40 points)
+    weak_penalty = min(40, weak_count * 10)
+    score -= weak_penalty
+    
+    # Deduct for medium passwords (up to -20 points)
+    medium_penalty = min(20, medium_count * 5)
+    score -= medium_penalty
+    
+    # Deduct for reused passwords (up to -30 points)
+    reused_penalty = min(30, reused_count * 5)
+    score -= reused_penalty
+    
+    # Deduct if average entropy is low (up to -10 points)
+    if average_entropy < 45:
+        score -= 10
+    elif average_entropy < 55:
+        score -= 5
+    
+    # Ensure score doesn't go below 0
+    score = max(0, score)
+    
+    # Generate recommendations
+    recommendations = []
+    
+    if weak_count > 0:
+        recommendations.append({
+            "id": "weak_passwords",
+            "severity": "high",
+            "title": f"Update {weak_count} weak password{'s' if weak_count > 1 else ''}",
+            "description": f"You have {weak_count} password{'s' if weak_count > 1 else ''} with low entropy that could be easily cracked.",
+            "action": "Update weak passwords",
+            "count": weak_count
+        })
+    
+    if reused_count > 0:
+        recommendations.append({
+            "id": "reused_passwords",
+            "severity": "high",
+            "title": f"{reused_count} reused password{'s' if reused_count > 1 else ''}",
+            "description": "Using the same password for multiple accounts is risky. If one is compromised, all are at risk.",
+            "action": "Make passwords unique",
+            "count": reused_count
+        })
+    
+    if medium_count > 2:
+        recommendations.append({
+            "id": "medium_passwords",
+            "severity": "medium",
+            "title": f"Strengthen {medium_count} medium passwords",
+            "description": "Consider upgrading to stronger passphrases with more words for better security.",
+            "action": "Upgrade passwords",
+            "count": medium_count
+        })
+    
+    if average_entropy < 50:
+        recommendations.append({
+            "id": "low_entropy",
+            "severity": "medium",
+            "title": "Low average entropy detected",
+            "description": f"Your average password entropy is {average_entropy} bits. Aim for 55+ bits for better security.",
+            "action": "Use Password Wizard"
+        })
+    
+    if score >= 90:
+        recommendations.append({
+            "id": "excellent",
+            "severity": "success",
+            "title": "Excellent password security!",
+            "description": "Your passwords are strong and unique. Keep up the good security practices!",
+            "action": None
+        })
+    
+    if not recommendations:
+        recommendations.append({
+            "id": "good_health",
+            "severity": "success",
+            "title": "Good password health",
+            "description": "Your passwords are in good shape. Continue monitoring and updating them regularly.",
+            "action": None
+        })
+    
+    # Format reused passwords for display
+    reused_display = []
+    for items in reused:
+        reused_display.append({
+            "passphrase": items[0]["passphrase"],
+            "count": len(items),
+            "labels": [p.get("label", "Unlabeled") for p in items]
+        })
+    
+    return {
+        "security_score": score,
+        "total_passwords": total,
+        "weak_count": weak_count,
+        "medium_count": medium_count,
+        "strong_count": strong_count,
+        "reused_count": reused_count,
+        "average_entropy": average_entropy,
+        "recommendations": recommendations,
+        "weak_passwords": weak_passwords[:5],  # Return top 5 weak passwords
+        "reused_passwords": reused_display
+    }
 
 
 # Startup: Seed admin and create indexes
