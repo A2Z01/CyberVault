@@ -1,14 +1,18 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Copy, Check, Shield, Zap, LogOut, User } from "lucide-react";
+import { Copy, Check, Shield, Zap, LogOut, User, Save, History, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useAuth } from "@/contexts/AuthContext";
 import LoginForm from "@/components/Auth/LoginForm";
+import PasswordWizard from "@/components/PasswordWizard";
+import SavedPassphrases from "@/components/SavedPassphrases";
+import axios from "axios";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -24,6 +28,11 @@ const CyberVault = () => {
   const [strength, setStrength] = useState("medium");
   const [copied, setCopied] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [showWizard, setShowWizard] = useState(false);
+  const [showSaved, setShowSaved] = useState(false);
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [saveLabel, setSaveLabel] = useState("");
+  const [savedTrigger, setSavedTrigger] = useState(0);
 
   const generatePassphrase = async () => {
     setIsGenerating(true);
@@ -135,6 +144,73 @@ const CyberVault = () => {
     toast.success("Logged out successfully");
   };
 
+  const handleWizardGenerate = async (answers) => {
+    try {
+      // Get recommendations from backend
+      const { data } = await axios.post(`${API}/recommend`, answers, {
+        headers: { "Content-Type": "application/json" },
+      });
+
+      // Apply recommendations
+      setWordCount(data.word_count);
+      setSeparator(data.separator);
+      setIncludeNumbers(data.append_digit);
+
+      // Show explanation
+      toast.success(data.explanation, {
+        duration: 5000,
+        style: {
+          background: '#065f46',
+          color: '#d1fae5',
+          border: '1px solid #34d399',
+        },
+      });
+
+      // Generate with recommended settings
+      setTimeout(() => {
+        generatePassphrase();
+      }, 500);
+    } catch (error) {
+      console.error("Failed to get recommendations:", error);
+      toast.error("Failed to get recommendations");
+    }
+  };
+
+  const handleSavePassphrase = async () => {
+    if (!passphrase) return;
+
+    try {
+      await axios.post(
+        `${API}/passphrases/save`,
+        {
+          passphrase,
+          entropy,
+          strength,
+          word_count: wordCount,
+          separator: separator === "none" ? "" : separator,
+          has_numbers: includeNumbers,
+          use_case: "general",
+          label: saveLabel,
+        },
+        { withCredentials: true }
+      );
+
+      toast.success("Passphrase saved successfully!", {
+        style: {
+          background: '#065f46',
+          color: '#d1fae5',
+          border: '1px solid #34d399',
+        },
+      });
+      setShowSaveDialog(false);
+      setSaveLabel("");
+      setSavedTrigger(prev => prev + 1);
+    } catch (error) {
+      console.error("Failed to save passphrase:", error);
+      toast.error("Failed to save passphrase");
+    }
+  };
+
   useEffect(() => {
     if (!authLoading && !user) {
       setShowAuth(true);
@@ -189,14 +265,24 @@ const CyberVault = () => {
             <User className="w-5 h-5 text-emerald-400" />
             <span className="text-slate-300">{user.email}</span>
           </div>
-          <Button
-            onClick={handleLogout}
-            variant="ghost"
-            className="text-slate-400 hover:text-emerald-400 hover:bg-slate-800/50"
-          >
-            <LogOut className="w-5 h-5 mr-2" />
-            Logout
-          </Button>
+          <div className="flex items-center gap-3">
+            <Button
+              onClick={() => setShowSaved(true)}
+              variant="ghost"
+              className="text-slate-400 hover:text-emerald-400 hover:bg-slate-800/50"
+            >
+              <History className="w-5 h-5 mr-2" />
+              Saved
+            </Button>
+            <Button
+              onClick={handleLogout}
+              variant="ghost"
+              className="text-slate-400 hover:text-emerald-400 hover:bg-slate-800/50"
+            >
+              <LogOut className="w-5 h-5 mr-2" />
+              Logout
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -270,6 +356,15 @@ const CyberVault = () => {
               <Zap className="w-5 h-5 mr-2" />
               {isGenerating ? "Generating..." : "Generate New"}
             </Button>
+
+            <Button
+              onClick={() => setShowWizard(true)}
+              variant="outline"
+              className="w-full bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 hover:border-emerald-500/50 text-emerald-400 font-semibold py-6 rounded-lg transition-all duration-300"
+            >
+              <Wand2 className="w-5 h-5 mr-2" />
+              Password Wizard
+            </Button>
           </div>
         </div>
 
@@ -278,38 +373,50 @@ const CyberVault = () => {
           <div className="backdrop-blur-2xl bg-slate-900/40 border border-emerald-500/30 shadow-[0_8px_32px_rgba(0,0,0,0.5)] rounded-2xl p-12 relative overflow-hidden">
             <div className="flex justify-between items-start mb-8">
               <h2 className="text-2xl md:text-3xl font-bold tracking-tight text-slate-200" style={{ fontFamily: 'Outfit, sans-serif' }}>Your Passphrase</h2>
-              <Button
-                data-testid="copy-button"
-                onClick={copyToClipboard}
-                variant="ghost"
-                size="icon"
-                disabled={!passphrase}
-                className="text-slate-400 hover:text-emerald-400 hover:bg-slate-800/50 transition-all duration-300 h-12 w-12"
-              >
-                <AnimatePresence mode="wait">
-                  {copied ? (
-                    <motion.div
-                      key="check"
-                      initial={{ scale: 0, rotate: -180 }}
-                      animate={{ scale: 1.3, rotate: 0 }}
-                      exit={{ scale: 0, rotate: 180 }}
-                      transition={{ duration: 0.4, type: "spring", stiffness: 200 }}
-                    >
-                      <Check className="w-8 h-8 text-emerald-400 stroke-[3]" />
-                    </motion.div>
-                  ) : (
-                    <motion.div
-                      key="copy"
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      exit={{ scale: 0 }}
-                      transition={{ duration: 0.2 }}
-                    >
-                      <Copy className="w-6 h-6" />
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  onClick={() => setShowSaveDialog(true)}
+                  variant="ghost"
+                  size="icon"
+                  disabled={!passphrase}
+                  className="text-slate-400 hover:text-emerald-400 hover:bg-slate-800/50 transition-all duration-300 h-12 w-12"
+                  title="Save passphrase"
+                >
+                  <Save className="w-6 h-6" />
+                </Button>
+                <Button
+                  data-testid="copy-button"
+                  onClick={copyToClipboard}
+                  variant="ghost"
+                  size="icon"
+                  disabled={!passphrase}
+                  className="text-slate-400 hover:text-emerald-400 hover:bg-slate-800/50 transition-all duration-300 h-12 w-12"
+                >
+                  <AnimatePresence mode="wait">
+                    {copied ? (
+                      <motion.div
+                        key="check"
+                        initial={{ scale: 0, rotate: -180 }}
+                        animate={{ scale: 1.3, rotate: 0 }}
+                        exit={{ scale: 0, rotate: 180 }}
+                        transition={{ duration: 0.4, type: "spring", stiffness: 200 }}
+                      >
+                        <Check className="w-8 h-8 text-emerald-400 stroke-[3]" />
+                      </motion.div>
+                    ) : (
+                      <motion.div
+                        key="copy"
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        exit={{ scale: 0 }}
+                        transition={{ duration: 0.2 }}
+                      >
+                        <Copy className="w-6 h-6" />
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </Button>
+              </div>
             </div>
 
             <div 
@@ -390,6 +497,56 @@ const CyberVault = () => {
           </div>
         </div>
       </div>
+
+      {/* Modals */}
+      <PasswordWizard open={showWizard} onClose={() => setShowWizard(false)} onGenerate={handleWizardGenerate} />
+      <SavedPassphrases open={showSaved} onClose={() => setShowSaved(false)} trigger={savedTrigger} />
+      
+      {/* Save Dialog */}
+      {showSaveDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-slate-900 border border-emerald-500/30 rounded-2xl p-8 max-w-md w-full mx-4"
+          >
+            <h3 className="text-2xl font-bold text-slate-100 mb-4" style={{ fontFamily: 'Outfit, sans-serif' }}>
+              Save Passphrase
+            </h3>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="save-label" className="text-slate-200">Label (Optional)</Label>
+                <Input
+                  id="save-label"
+                  placeholder="e.g., Banking Password, Work Email"
+                  value={saveLabel}
+                  onChange={(e) => setSaveLabel(e.target.value)}
+                  className="mt-2 bg-slate-950/60 border-slate-700 text-slate-200"
+                />
+              </div>
+              <div className="flex gap-3 mt-6">
+                <Button
+                  onClick={() => {
+                    setShowSaveDialog(false);
+                    setSaveLabel("");
+                  }}
+                  variant="ghost"
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSavePassphrase}
+                  className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-slate-950"
+                >
+                  <Save className="w-4 h-4 mr-2" />
+                  Save
+                </Button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 };

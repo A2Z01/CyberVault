@@ -109,6 +109,37 @@ class UserResponse(BaseModel):
     created_at: str
 
 
+class SavePassphraseRequest(BaseModel):
+    passphrase: str
+    entropy: float
+    strength: str
+    word_count: int
+    separator: str
+    has_numbers: bool
+    use_case: str = "general"
+    label: str = ""
+
+
+class SavedPassphraseResponse(BaseModel):
+    id: str
+    passphrase: str
+    entropy: float
+    strength: str
+    word_count: int
+    separator: str
+    has_numbers: bool
+    use_case: str
+    label: str
+    created_at: str
+
+
+class RecommendationRequest(BaseModel):
+    use_case: str
+    typing_frequency: str
+    priority: str
+    requires_special_chars: bool
+
+
 def calculate_entropy(passphrase: str, word_count: int, append_digit: bool) -> float:
     wordlist_size = len(WORDLIST)
     combinations = wordlist_size ** word_count
@@ -289,11 +320,131 @@ async def logout(response: Response):
     return {"message": "Logged out successfully"}
 
 
+# Passphrase Recommendations
+@api_router.post("/recommend")
+async def get_recommendations(request: RecommendationRequest):
+    """Get passphrase recommendations based on user needs."""
+    
+    # Define recommendation rules
+    recommendations = {
+        "word_count": 4,
+        "separator": "-",
+        "append_digit": False,
+        "explanation": ""
+    }
+    
+    # Banking, Work, High Security
+    if request.use_case in ["banking", "work", "email", "financial"]:
+        recommendations["word_count"] = 6 if request.priority == "security" else 5
+        recommendations["append_digit"] = True
+        recommendations["separator"] = "-"
+        recommendations["explanation"] = f"For {request.use_case}, we recommend {recommendations['word_count']} words with numbers for strong security."
+    
+    # Social Media, Gaming
+    elif request.use_case in ["social_media", "gaming", "entertainment"]:
+        recommendations["word_count"] = 4 if request.typing_frequency == "daily" else 5
+        recommendations["append_digit"] = request.requires_special_chars
+        recommendations["separator"] = "-"
+        recommendations["explanation"] = f"For {request.use_case}, a memorable {recommendations['word_count']}-word passphrase works well."
+    
+    # Personal, Notes, Low Security
+    elif request.use_case in ["personal", "notes", "low_security"]:
+        recommendations["word_count"] = 3
+        recommendations["append_digit"] = False
+        recommendations["separator"] = " "
+        recommendations["explanation"] = "For personal use, a simple 3-word passphrase is easy to remember."
+    
+    # Maximum Security
+    else:
+        if request.priority == "security":
+            recommendations["word_count"] = 8
+            recommendations["append_digit"] = True
+            recommendations["separator"] = "-"
+            recommendations["explanation"] = "For maximum security, we recommend 8 words with numbers."
+        else:
+            recommendations["word_count"] = 4
+            recommendations["append_digit"] = request.requires_special_chars
+            recommendations["separator"] = "-"
+            recommendations["explanation"] = "A balanced 4-word passphrase offers good security and memorability."
+    
+    # Adjust based on typing frequency
+    if request.typing_frequency == "daily" and recommendations["word_count"] > 5:
+        recommendations["word_count"] = 5
+        recommendations["explanation"] += " Reduced to 5 words since you'll type it daily."
+    
+    return recommendations
+
+
+# Saved Passphrases Endpoints
+@api_router.post("/passphrases/save")
+async def save_passphrase(request: SavePassphraseRequest, req: Request):
+    """Save a passphrase to user's history."""
+    user = await get_current_user(req, db)
+    
+    passphrase_doc = {
+        "user_id": user["id"],
+        "passphrase": request.passphrase,
+        "entropy": request.entropy,
+        "strength": request.strength,
+        "word_count": request.word_count,
+        "separator": request.separator,
+        "has_numbers": request.has_numbers,
+        "use_case": request.use_case,
+        "label": request.label,
+        "created_at": datetime.now(timezone.utc)
+    }
+    
+    result = await db.saved_passphrases.insert_one(passphrase_doc)
+    
+    return {
+        "id": str(result.inserted_id),
+        "message": "Passphrase saved successfully"
+    }
+
+
+@api_router.get("/passphrases/saved")
+async def get_saved_passphrases(request: Request):
+    """Get all saved passphrases for the current user."""
+    user = await get_current_user(request, db)
+    
+    passphrases = await db.saved_passphrases.find(
+        {"user_id": user["id"]},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    
+    # Add id field from MongoDB _id
+    cursor = db.saved_passphrases.find({"user_id": user["id"]}).sort("created_at", -1).limit(100)
+    passphrases = []
+    async for doc in cursor:
+        doc["id"] = str(doc.pop("_id"))
+        doc["created_at"] = doc["created_at"].isoformat()
+        passphrases.append(doc)
+    
+    return passphrases
+
+
+@api_router.delete("/passphrases/{passphrase_id}")
+async def delete_passphrase(passphrase_id: str, request: Request):
+    """Delete a saved passphrase."""
+    user = await get_current_user(request, db)
+    
+    result = await db.saved_passphrases.delete_one({
+        "_id": ObjectId(passphrase_id),
+        "user_id": user["id"]
+    })
+    
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Passphrase not found")
+    
+    return {"message": "Passphrase deleted successfully"}
+
+
 # Startup: Seed admin and create indexes
 @app.on_event("startup")
 async def startup_event():
     # Create indexes
     await db.users.create_index("email", unique=True)
+    await db.saved_passphrases.create_index([("user_id", 1), ("created_at", -1)])
     
     # Seed admin
     admin_email = os.environ.get("ADMIN_EMAIL", "admin@example.com")
