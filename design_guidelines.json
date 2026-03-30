@@ -1,0 +1,92 @@
+{
+  "theme": "Dark",
+  "archetype": "Archetype 7: Electric & Neon (Retro-Futurism) paired with Glassmorphism",
+  "color_palette": {
+    "background": "bg-slate-950 (#020617)",
+    "surface": "bg-slate-900/40",
+    "border": "border-emerald-500/30",
+    "primary_accent": "text-emerald-400 (#34d399)",
+    "strength_meter": {
+      "weak": "bg-rose-500 shadow-[0_0_12px_rgba(244,63,94,0.6)]",
+      "medium": "bg-amber-400 shadow-[0_0_12px_rgba(251,191,36,0.6)]",
+      "secure": "bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.8)]"
+    }
+  },
+  "typography": {
+    "heading_font": "Outfit",
+    "body_font": "IBM Plex Sans",
+    "mono_font": "JetBrains Mono",
+    "hierarchy": {
+      "h1": "text-4xl md:text-5xl lg:text-6xl font-black tracking-tighter text-slate-100",
+      "h2": "text-2xl md:text-3xl font-bold tracking-tight text-slate-200",
+      "h3": "text-xl font-medium tracking-tight text-slate-200",
+      "passphrase_display": "font-mono text-3xl md:text-5xl lg:text-6xl tracking-[0.1em] font-light text-emerald-400 drop-shadow-[0_0_12px_rgba(52,211,153,0.5)] leading-tight"
+    }
+  },
+  "layout_and_spacing": {
+    "grid_system": "The 'Control Room' Grid",
+    "structure": "grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 w-full max-w-7xl mx-auto p-6 md:p-12 items-stretch min-h-[80vh]",
+    "sidebar": "col-span-1 lg:col-span-4 space-y-8 flex flex-col justify-start w-full",
+    "main_display": "col-span-1 lg:col-span-8 flex flex-col justify-center space-y-12 w-full h-full",
+    "container_padding": "p-8 md:p-12",
+    "alignment": "Strict left-alignment for controls to enhance the 'control panel' feel. Passphrase display centered optically within its expansive container."
+  },
+  "surfaces_and_materials": {
+    "glassmorphism": {
+      "class": "backdrop-blur-2xl bg-slate-900/40 border border-emerald-500/30 shadow-[0_8px_32px_rgba(0,0,0,0.5)] rounded-2xl relative overflow-hidden",
+      "usage": "Main 'Cyber-Vault' display container and the sidebar controls container."
+    },
+    "inputs": {
+      "class": "bg-slate-950/60 border border-slate-700 focus:border-emerald-500/60 focus:ring-1 focus:ring-emerald-500/60 text-slate-200 placeholder:text-slate-600 rounded-lg backdrop-blur-md",
+      "usage": "Dropdown selects, sliders, toggles."
+    }
+  },
+  "components_strategy": {
+    "libraries": [
+      "lucide-react",
+      "framer-motion",
+      "sonner"
+    ],
+    "slider": "Shadcn Slider, heavily customized. Use an emerald-400 background for the active track and a glowing thumb (`bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]`).",
+    "select": "Shadcn Select. Ensure the dropdown popover matches the glassmorphic dark theme (`bg-slate-900 border-emerald-500/30`).",
+    "switch": "Shadcn Switch. Custom classes for active state (`data-[state=checked]:bg-emerald-500`).",
+    "strength_meter": "A specialized progress bar component. Wrapper `h-2 w-full rounded-full bg-slate-800/80`. Fill element smoothly transitions `width` and `backgroundColor` based on the computed entropy.",
+    "copy_button": "A utility action button positioned near the passphrase. Requires complex interaction: on-click -> set copied state -> trigger framer-motion path animation for a checkmark -> fire Sonner toast -> revert state after 2s."
+  },
+  "motion_and_interactions": {
+    "hover_states": "Buttons: `hover:bg-slate-800/80 hover:border-emerald-500/50 hover:text-emerald-300 transition-all duration-300`.",
+    "passphrase_glow": "Subtle breathing/pulse animation on the text shadow to make the vault feel 'alive' when a phrase is generated.",
+    "strength_transition": "The fill bar MUST use `transition-all duration-700 ease-out` so the color and width slide gracefully when recalculating."
+  },
+  "media": {
+    "background_image": {
+      "url": "https://static.prod-images.emergentagent.com/jobs/b58ad749-2a8a-46d4-9053-efd9e05e23ac/images/0ec6e2150d74a657d0122210311f2dd763b55692324edd15bb8b75c9591a70aa.png",
+      "description": "Dark abstract tech-vault environment.",
+      "usage": "Set as a fixed, absolute-positioned background behind the main `min-h-screen` container. Cover it with a heavy overlay (`bg-slate-950/80` or `bg-slate-950/90`) so it adds subtle texture without ruining contrast."
+    }
+  },
+  "testing": {
+    "attributes": [
+      "data-testid='passphrase-display'",
+      "data-testid='word-count-slider'",
+      "data-testid='separator-select'",
+      "data-testid='include-numbers-toggle'",
+      "data-testid='generate-button'",
+      "data-testid='copy-button'",
+      "data-testid='strength-meter'"
+    ]
+  },
+  "instructions_to_main_agent": [
+    "NOTE: User overrode the original 'Flask + index.html' request with 'FastAPI + React'. Set up a standard React SPA frontend and FastAPI backend.",
+    "Frontend setup: Initialize React + Vite + Tailwind CSS + Shadcn UI.",
+    "Install required fonts in index.css: Outfit, IBM Plex Sans, JetBrains Mono.",
+    "Install libraries: framer-motion, sonner, lucide-react.",
+    "Build the UI using the 12-column grid specified in layout_and_spacing.",
+    "Apply the exact glassmorphism classes to the main containers. Include generous internal padding (`p-8` or `p-12`).",
+    "The passphrase output MUST be styled exactly as defined in typography.hierarchy.passphrase_display. It needs the neon glow.",
+    "Implement the Dual Feedback Copy mechanism: Clicking copy changes the clipboard icon to an animated checkmark (Framer Motion) and triggers a 'Copied!' Toast (Sonner).",
+    "Backend (FastAPI): Create `/api/generate` endpoint. Use Python's `secrets` module and a hardcoded list of 100+ distinct tech/cyber/nature nouns. Accept parameters: word_count (int, 3-8), separator (str), append_digit (bool).",
+    "The API must calculate rough bit-entropy based on the generated length and character space, and return it alongside the passphrase.",
+    "Bind the frontend UI controls state to fetch the generated passphrase. Update the strength meter's width (0-100%) and color dynamically based on the returned entropy."
+  ]
+}
