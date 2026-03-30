@@ -17,7 +17,7 @@ import { toast } from 'sonner';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 
-const PasswordHealthDashboard = ({ open, onClose }) => {
+const PasswordHealthDashboard = ({ open, onClose, onOpenWizard, onOpenSaved }) => {
   const [healthData, setHealthData] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -40,6 +40,18 @@ const PasswordHealthDashboard = ({ open, onClose }) => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleActionClick = (actionId) => {
+    onClose(); // Close health dashboard first
+    
+    setTimeout(() => {
+      if (actionId === 'Use Password Wizard' || actionId === 'low_entropy') {
+        onOpenWizard && onOpenWizard();
+      } else if (actionId === 'Update weak passwords' || actionId === 'Make passwords unique' || actionId === 'Upgrade passwords') {
+        onOpenSaved && onOpenSaved();
+      }
+    }, 300);
   };
 
   const getScoreColor = (score) => {
@@ -283,7 +295,8 @@ const PasswordHealthDashboard = ({ open, onClose }) => {
                     <Button
                       size="sm"
                       variant="outline"
-                      className="shrink-0 border-slate-600 hover:border-emerald-500/50 text-slate-300"
+                      onClick={() => handleActionClick(rec.action)}
+                      className="shrink-0 border-slate-600 hover:border-emerald-500/50 text-slate-300 hover:text-emerald-400 transition-colors"
                     >
                       {rec.action}
                     </Button>

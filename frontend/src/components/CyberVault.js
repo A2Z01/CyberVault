@@ -511,7 +511,12 @@ const CyberVault = () => {
       {/* Modals */}
       <PasswordWizard open={showWizard} onClose={() => setShowWizard(false)} onGenerate={handleWizardGenerate} />
       <SavedPassphrases open={showSaved} onClose={() => setShowSaved(false)} trigger={savedTrigger} />
-      <PasswordHealthDashboard open={showHealthDashboard} onClose={() => setShowHealthDashboard(false)} />
+      <PasswordHealthDashboard 
+        open={showHealthDashboard} 
+        onClose={() => setShowHealthDashboard(false)}
+        onOpenWizard={() => setShowWizard(true)}
+        onOpenSaved={() => setShowSaved(true)}
+      />
       
       {/* Save Dialog */}
       {showSaveDialog && (
